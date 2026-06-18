@@ -31,7 +31,18 @@ export async function initDatabase() {
                     transfer_id INTEGER
                     REFERENCES transfers(id),
                     created_at TIMESTAMP DEFAULT NOW()
-);`
+                    );`
+            )
+
+            await pool.query(
+                `
+                CREATE TABLE IF NOT EXISTS users(
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) NOT NULL,
+                    password VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                ) 
+                `
             )
             logger.info("Database initialized successfully.");
             break;

@@ -1,6 +1,7 @@
 import express from "express";
 import accountRoutes from './routes/account.routes.js';
 import transferRoutes from './routes/transfer.routes.js'
+import authRoutes from './routes/auth.routes.js';
 import dotenv from 'dotenv';
 import { setupSwagger } from './swagger.js'
 dotenv.config();
@@ -17,5 +18,6 @@ app.get('/health', (req, res) => {
 })
 app.use('/api/account', accountRoutes);
 app.use("/api/transfers", transferRoutes);
+app.use('/api/auth', authRoutes);
 
 export default app;

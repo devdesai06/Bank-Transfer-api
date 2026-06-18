@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createTransfer, getTransfer, getTransfers } from "../controllers/transfer.controllers.js";
+import { authenticateToken } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
@@ -46,7 +47,7 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.post("/", createTransfer);
+router.post("/", authenticateToken, createTransfer);
 
 
 /**
@@ -72,7 +73,7 @@ router.post("/", createTransfer);
  *       500:
  *         description: Internal server error
  */
-router.get("/:id", getTransfer);
+router.get("/:id", authenticateToken, getTransfer);
 
 
 /**
@@ -88,5 +89,5 @@ router.get("/:id", getTransfer);
  *       500:
  *         description: Internal server error
  */
-router.get("/", getTransfers);
+router.get("/", authenticateToken, getTransfers);
 export default router;
