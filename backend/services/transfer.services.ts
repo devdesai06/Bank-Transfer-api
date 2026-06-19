@@ -4,7 +4,8 @@ export const transferMoney = async (
     fromAccountId: number,
     toAccountId: number,
     amount: number,
-    idempotencyKey: string
+    idempotencyKey: string,
+    userId: number
 ) => {
     const client = await pool.connect();
 
@@ -97,6 +98,10 @@ export const transferMoney = async (
             throw new Error("Sender account not found");
         }
 
+        if (sender.ownerid !== userId) {
+            throw new Error("Unauthorized to transfer from this account");
+        }
+
         // Fetch actual receiver
         const receiverResult = await client.query(
             `
@@ -171,27 +176,33 @@ export const transferMoney = async (
     }
 };
 
-export const getAllTransfers = async () => {
+export const getAllTransfers = async (userId: number) => {
     const result = await pool.query(`
-        SELECT *
-        FROM transfers
-        ORDER BY created_at DESC
-    `);
+        SELECT t.*
+        FROM transfers t
+        JOIN accounts a_from ON t.from_account_id = a_from.id
+        JOIN accounts a_to ON t.to_account_id = a_to.id
+        WHERE a_from.ownerid = $1 OR a_to.ownerid = $1
+        ORDER BY t.created_at DESC
+    `, [userId]);
 
     return result.rows;
 };
 
 export const getTransferById = async (
-    transferId: number
+    transferId: number,
+    userId: number
 ) => {
 
     const result = await pool.query(
         `
-        SELECT *
-        FROM transfers
-        WHERE id = $1
+        SELECT t.*
+        FROM transfers t
+        JOIN accounts a_from ON t.from_account_id = a_from.id
+        JOIN accounts a_to ON t.to_account_id = a_to.id
+        WHERE t.id = $1 AND (a_from.ownerid = $2 OR a_to.ownerid = $2)
         `,
-        [transferId]
+        [transferId, userId]
     );
 
     return result.rows[0];

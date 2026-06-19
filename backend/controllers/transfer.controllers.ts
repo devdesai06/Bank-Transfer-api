@@ -17,11 +17,14 @@ export const createTransfer = async (req: Request, res: Response, next: NextFunc
             res.status(400).json({ success: false, message: ' Idempotency-Key is required' });
             return;
         }
+        
+        const userId = req.user!.id;
         const transfer = await transferMoney(
             fromAccountId,
             toAccountId,
             amount, 
-            idempotencyKey
+            idempotencyKey,
+            userId
         );
 
         logger.info({ transferId: transfer.id }, 'Transfer created successfully');
@@ -50,8 +53,9 @@ export const getTransfers = async (
 
     try {
         logger.info("Fetching all transfers");
+        const userId = req.user!.id;
         const transfers =
-            await getAllTransfers();
+            await getAllTransfers(userId);
 
         logger.info({ count: transfers.length }, "Transfers fetched successfully");
         res.status(200).json({
@@ -79,10 +83,11 @@ export const getTransfer = async (
     try {
 
         const id = Number(req.params.id);
+        const userId = req.user!.id;
         logger.info({ transferId: id }, "Fetching transfer by ID");
 
         const transfer =
-            await getTransferById(id);
+            await getTransferById(id, userId);
 
         if (!transfer) {
             logger.info({ transferId: id }, "Transfer not found");

@@ -1,16 +1,22 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createAccount as createAccountService, getAccountById as getAccountByIdService, getBalance } from '../services/account.services.js';
+import { createAccount as createAccountService, getAccountById as getAccountByIdService, getBalance,getAccountByIdAndOwner } from '../services/account.services.js';
 import { logger } from '../utils/logger.js'
 export const createAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const { name, balance } = req.body;
+        const ownerId = req.user!.id;
+        if (!ownerId) {
+            logger.warn('Account creation failed: Missing or invalid ownerId');
+            res.status(400).json({ success: false, message: 'ownerId is required' });
+            return;
+        }
         logger.info("Attempting to create account")
         if (!name || balance == undefined) {
             logger.warn({ body: req.body }, 'Account creation failed: Missing parameters');
             res.status(400).json({ success: false, message: 'Name and Balance is required' });
             return;
         }
-        const account = await createAccountService(name, balance);
+        const account = await createAccountService(name, balance, ownerId);
         logger.info({ accountName: name }, 'Account created successfully');
         res.status(201).json({
             success: true,
@@ -32,8 +38,16 @@ export const getAccountById = async (req: Request, res: Response, next: NextFunc
             res.status(400).json({ success: false, message: 'accountId is required' });
             return;
         }
+        const userId = req.user!.id;
 
-        const account = await getAccountByIdService(id);
+        if (!userId) {
+            logger.warn('Account retrieval failed: Missing or invalid userId');
+            res.status(400).json({ success: false, message: 'userId is required' });
+            return;
+        }
+
+
+        const account = await getAccountByIdAndOwner(id, userId);
         if (!account) {
             logger.info({ accountId: id }, 'Account not found');
             res.status(404).json({ success: false, message: 'Account not found' });
@@ -63,14 +77,15 @@ export const getAccountBalance = async (
         const accountId =
             Number(req.params.id);
 
-        const balance =
-            await getBalance(accountId);
+        const userId = req.user!.id;
 
-        if (!balance) {
-            logger.info({ accountId }, 'Account balance not found');
+        const account = await getAccountByIdAndOwner(accountId, userId);
+
+        if (!account) {
+            logger.info({ accountId }, 'Account not found or unauthorized');
             res.status(404).json({
                 success: false,
-                message: "Account not found"
+                message: "Account not found or unauthorized"
             });
 
             return;
@@ -79,7 +94,7 @@ export const getAccountBalance = async (
         logger.info({ accountId }, 'Account balance retrieved successfully');
         res.status(200).json({
             success: true,
-            data: balance
+            data: { balance: account.balance }
         });
 
     } catch (error) {

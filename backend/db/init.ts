@@ -9,7 +9,8 @@ export async function initDatabase() {
                 CREATE TABLE IF NOT EXISTS accounts (
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
-                    balance NUMERIC(12,2) NOT NULL
+                    balance NUMERIC(12,2) NOT NULL,
+                    ownerid INTEGER REFERENCES users(id)
                 );
             `);
 
