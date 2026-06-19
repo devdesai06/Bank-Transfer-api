@@ -8,6 +8,7 @@ export const transferMoney = async (
     userId: number
 ) => {
     const client = await pool.connect();
+    let transferId: number | undefined;
 
     try {
         if (amount <= 0) {
@@ -17,8 +18,16 @@ export const transferMoney = async (
         if (fromAccountId === toAccountId) {
             throw new Error("Cannot transfer to the same account");
         }
-        await client.query("BEGIN");
 
+        const transferResult = await client.query(
+            `
+            INSERT INTO transfers (from_account_id, to_account_id, amount, status)
+            VALUES ($1, $2, $3, 'PENDING')
+            RETURNING id
+            `,
+            [fromAccountId, toAccountId, amount]
+        );
+        transferId = transferResult.rows[0].id;
         //try adding the idempotency key
         const keyResult = await client.query(
             `
@@ -52,11 +61,28 @@ export const transferMoney = async (
                         `,
                         [existingKey.rows[0].transfer_id]
                     );
-                await client.query("COMMIT");
+
                 return transfer.rows[0];
             }
             throw new Error("Transfer already being processed");
         }
+
+
+
+        await client.query(
+            `
+            UPDATE idempotency_keys
+            SET transfer_id = $1
+            WHERE idempotency_key = $2
+            `,
+            [transferId, idempotencyKey]
+        )
+        await client.query("BEGIN");
+
+        await client.query(
+            `UPDATE transfers SET status = 'PROCESSING' WHERE id = $1`,
+            [transferId]
+        );
 
         // Prevent deadlocks by always locking in same order
         const firstId = Math.min(fromAccountId, toAccountId);
@@ -122,6 +148,7 @@ export const transferMoney = async (
             throw new Error("Insufficient balance");
         }
 
+
         // Debit sender
         await client.query(
             `
@@ -142,34 +169,40 @@ export const transferMoney = async (
             [amount, toAccountId]
         );
 
-        // Record transfer
-        const transferResult = await client.query(
-            `
-            INSERT INTO transfers
-            (
-                from_account_id,
-                to_account_id,
-                amount
-            )
-            VALUES ($1, $2, $3)
-            RETURNING *
-            `,
-            [fromAccountId, toAccountId, amount]
-        );
+
+
         await client.query(
             `
-            UPDATE idempotency_keys
-            SET transfer_id = $1
-            WHERE idempotency_key = $2
+            UPDATE transfers
+            SET status='COMPLETED'
+            WHERE id=$1
             `,
-            [transferResult.rows[0].id, idempotencyKey]
-        )
+            [transferId]
+        );
         await client.query("COMMIT");
 
-        return transferResult.rows[0];
+        const finalResult = await client.query(
+            `
+            SELECT *
+            FROM transfers
+            WHERE id = $1
+            `,
+            [transferId]
+        );
 
+        return finalResult.rows[0];
     } catch (error) {
         await client.query("ROLLBACK");
+        if (transferId) {
+            await pool.query(
+                `
+                UPDATE transfers
+                SET status='FAILED'
+                WHERE id=$1
+                `,
+                [transferId]
+            );
+        }
         throw error;
     } finally {
         client.release();

@@ -6,11 +6,7 @@ export const createTransfer = async (req: Request, res: Response, next: NextFunc
     try {
         const { fromAccountId, toAccountId, amount } = req.body;
         logger.info({ fromAccountId, toAccountId, amount }, "Attempting to create transfer");
-        if (!fromAccountId || !toAccountId || !amount) {
-            logger.warn({ body: req.body }, 'Transfer failed: Missing parameters');
-            res.status(400).json({ success: false, message: ' All fields are required' });
-            return;
-        }
+
         const idempotencyKey = req.header("Idempotency-Key");
         if (!idempotencyKey) {
             logger.warn('Transfer failed: Missing Idempotency-Key');

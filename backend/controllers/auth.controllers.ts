@@ -11,13 +11,7 @@ export const register = async (req: Request, res: Response, next: NextFunction):
     try {
         const { username, password } = req.body;
 
-        if (!username || !password) {
-            res.status(400).json({
-                success: false,
-                message: 'Username and password are required'
-            });
-            return;
-        }
+
 
         logger.info({ username }, "Attempting to register user");
         const user = await findUserByUsername(username);
@@ -72,13 +66,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
     try {
         const { username, password } = req.body;
 
-        if (!username || !password) {
-            res.status(400).json({
-                success: false,
-                message: 'Username and password are required'
-            });
-            return;
-        }
+
 
         logger.info({ username }, "Attempting to login user");
 

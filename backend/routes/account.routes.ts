@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { createAccount, getAccountById, getAccountBalance } from '../controllers/account.controllers.js';
 import { authenticateToken } from '../middlewares/auth.middleware.js';
+import { createAccountSchema } from '../validators/account.validators.js';
+import { validate } from '../middlewares/validate.middleware.js';
 
 const router = Router();
 
@@ -35,7 +37,7 @@ const router = Router();
  *       500:
  *         description: Internal server error
  */
-router.post('/create-account', authenticateToken, createAccount);
+router.post('/create-account', authenticateToken, validate(createAccountSchema), createAccount);
 /**
  * @swagger
  * /api/account/get-account/{id}:

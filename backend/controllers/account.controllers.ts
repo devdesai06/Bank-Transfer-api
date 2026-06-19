@@ -11,11 +11,6 @@ export const createAccount = async (req: Request, res: Response, next: NextFunct
             return;
         }
         logger.info("Attempting to create account")
-        if (!name || balance == undefined) {
-            logger.warn({ body: req.body }, 'Account creation failed: Missing parameters');
-            res.status(400).json({ success: false, message: 'Name and Balance is required' });
-            return;
-        }
         const account = await createAccountService(name, balance, ownerId);
         logger.info({ accountName: name }, 'Account created successfully');
         res.status(201).json({

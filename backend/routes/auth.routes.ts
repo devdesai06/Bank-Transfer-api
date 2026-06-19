@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { register, login } from "../controllers/auth.controllers.js";
-
+import { validate } from '../middlewares/validate.middleware.js';
+import { registerSchema,loginSchema } from '../validators/auth.validators.js';
 const router = Router();
 
 /**
@@ -40,7 +41,7 @@ const router = Router();
  * 500:
  * description: Internal server error
  */
-router.post("/register", register);
+router.post("/register",validate(registerSchema), register);
 
 /**
  * @swagger
@@ -75,6 +76,6 @@ router.post("/register", register);
  * 500:
  * description: Internal server error
  */
-router.post("/login", login);
+router.post("/login", validate(loginSchema),login);
 
 export default router;
