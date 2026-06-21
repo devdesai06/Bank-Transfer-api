@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createAccount as createAccountService, getAccountById as getAccountByIdService, getBalance,getAccountByIdAndOwner } from '../services/account.services.js';
+import { createAccount as createAccountService, getAccountById as getAccountByIdService, getBalance,getAccountByIdAndOwner, reconcileAccount as reconcileAccountService } from '../services/account.services.js';
 import { logger } from '../utils/logger.js'
 export const createAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -100,5 +100,34 @@ export const getAccountBalance = async (
 
     }
 
+};
+
+export const reconcileAccount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const accountId = Number(req.params.id);
+        if (!accountId) {
+            logger.warn('Account reconciliation failed: Missing or invalid accountId');
+            res.status(400).json({ success: false, message: 'accountId is required' });
+            return;
+        }
+
+        const userId = req.user!.id;
+        const account = await getAccountByIdAndOwner(accountId, userId);
+        if (!account) {
+            logger.info({ accountId }, 'Account not found or unauthorized for reconciliation');
+            res.status(404).json({ success: false, message: 'Account not found or unauthorized' });
+            return;
+        }
+
+        const result = await reconcileAccountService(accountId);
+        logger.info({ accountId }, 'Account reconciled successfully');
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error) {
+        logger.error({ error, accountId: req.params.id }, 'Failed to reconcile account');
+        res.status(500).json({ success: false, message: 'Failed to reconcile account' });
+    }
 };
 

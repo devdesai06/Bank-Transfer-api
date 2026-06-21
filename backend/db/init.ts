@@ -5,12 +5,23 @@ export async function initDatabase() {
     let retries = 5;
     while (retries > 0) {
         try {
+            await pool.query(
+                `
+                CREATE TABLE IF NOT EXISTS users(
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) NOT NULL,
+                    password VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                ) 
+                `
+            )
+
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS accounts (
                     id SERIAL PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
                     balance NUMERIC(12,2) NOT NULL,
-                    ownerid INTEGER REFERENCES users(id)
+                    owner_id INTEGER REFERENCES users(id)
                 );
             `);
 
@@ -33,17 +44,6 @@ export async function initDatabase() {
                     REFERENCES transfers(id),
                     created_at TIMESTAMP DEFAULT NOW()
                     );`
-            )
-
-            await pool.query(
-                `
-                CREATE TABLE IF NOT EXISTS users(
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(255) NOT NULL,
-                    password VARCHAR(255) NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW()
-                ) 
-                `
             )
             logger.info("Database initialized successfully.");
             break;
