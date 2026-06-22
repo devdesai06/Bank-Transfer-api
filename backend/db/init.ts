@@ -15,6 +15,7 @@ export async function initDatabase() {
                 ) 
                 `
             )
+            logger.debug("Table ready: users");
 
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS accounts (
@@ -24,6 +25,7 @@ export async function initDatabase() {
                     owner_id INTEGER REFERENCES users(id)
                 );
             `);
+            logger.debug("Table ready: accounts");
 
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS transfers (
@@ -34,6 +36,7 @@ export async function initDatabase() {
                     created_at TIMESTAMP DEFAULT NOW()
                 );
             `);
+            logger.debug("Table ready: transfers");
 
             await pool.query(
                 `CREATE TABLE IF NOT EXISTS idempotency_keys (
@@ -45,6 +48,20 @@ export async function initDatabase() {
                     created_at TIMESTAMP DEFAULT NOW()
                     );`
             )
+            logger.debug("Table ready: idempotency_keys");
+
+            await pool.query(
+                `CREATE TABLE IF NOT EXISTS outbox_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    event_type TEXT NOT NULL,
+                    payload JSONB NOT NULL,
+                    processed BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    processed_at TIMESTAMP
+                );`
+            )
+            logger.debug("Table ready: outbox_events");
+
             logger.info("Database initialized successfully.");
             break;
         } catch (error) {

@@ -1,4 +1,5 @@
 import express from "express";
+import { rateLimiter } from "./middlewares/rateLimiter.middleware.js";
 import accountRoutes from './routes/account.routes.js';
 import transferRoutes from './routes/transfer.routes.js'
 import authRoutes from './routes/auth.routes.js';
@@ -7,7 +8,9 @@ import { setupSwagger } from './swagger.js'
 dotenv.config();
 
 const app = express();
+
 app.use(express.json())
+app.use(rateLimiter)
 setupSwagger(app);
 
 app.get('/health', (req, res) => {

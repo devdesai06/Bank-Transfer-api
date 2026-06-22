@@ -1,4 +1,5 @@
 import pool from "../db/pool.js";
+import { logger } from "../utils/logger.js";
 
 export const transferMoney = async (
     fromAccountId: number,
@@ -12,10 +13,12 @@ export const transferMoney = async (
 
     try {
         if (amount <= 0) {
+            logger.warn({ amount }, "Transfer rejected: amount must be greater than 0");
             throw new Error("Amount must be greater than 0");
         }
 
         if (fromAccountId === toAccountId) {
+            logger.warn({ fromAccountId }, "Transfer rejected: cannot transfer to the same account");
             throw new Error("Cannot transfer to the same account");
         }
 
@@ -25,6 +28,7 @@ export const transferMoney = async (
 
         await client.query("BEGIN");
 
+        logger.debug({ idempotencyKey }, "Checking idempotency key");
         const keyResult = await client.query(
             `
             INSERT INTO idempotency_keys (idempotency_key)
@@ -37,6 +41,7 @@ export const transferMoney = async (
 
         // Key was already present → duplicate request
         if (keyResult.rows.length === 0) {
+            logger.warn({ idempotencyKey }, "Duplicate request detected via idempotency key");
             const existingKey = await client.query(
                 `SELECT * FROM idempotency_keys WHERE idempotency_key = $1 FOR UPDATE`,
                 [idempotencyKey]
@@ -44,6 +49,7 @@ export const transferMoney = async (
 
             if (existingKey.rows[0]?.transfer_id) {
                 // A previous request already completed — return that transfer
+                logger.info({ idempotencyKey, transferId: existingKey.rows[0].transfer_id }, "Returning existing completed transfer (idempotent)");
                 const transfer = await client.query(
                     `SELECT * FROM transfers WHERE id = $1`,
                     [existingKey.rows[0].transfer_id]
@@ -58,6 +64,7 @@ export const transferMoney = async (
        
 
         // Insert the transfer record in PENDING state
+        logger.debug({ fromAccountId, toAccountId, amount }, "Inserting transfer record in PENDING state");
         const transferResult = await client.query(
             `
             INSERT INTO transfers (from_account_id, to_account_id, amount, status)
@@ -82,10 +89,12 @@ export const transferMoney = async (
             `UPDATE transfers SET status = 'PROCESSING' WHERE id = $1`,
             [transferId]
         );
+        logger.debug({ transferId }, "Transfer status set to PROCESSING");
 
         // Prevent deadlocks by always locking in same order
         const firstId = Math.min(fromAccountId, toAccountId);
         const secondId = Math.max(fromAccountId, toAccountId);
+        logger.debug({ firstId, secondId }, "Acquiring row locks in deterministic order");
 
         await client.query(
             `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`,
@@ -104,9 +113,11 @@ export const transferMoney = async (
         const sender = senderResult.rows[0];
 
         if (!sender) {
+            logger.warn({ fromAccountId }, "Transfer rejected: sender account not found");
             throw new Error("Sender account not found");
         }
         if (sender.owner_id !== userId) {
+            logger.warn({ fromAccountId, userId }, "Transfer rejected: unauthorized sender");
             throw new Error("Unauthorized to transfer from this account");
         }
 
@@ -118,6 +129,7 @@ export const transferMoney = async (
         const receiver = receiverResult.rows[0];
 
         if (!receiver) {
+            logger.warn({ toAccountId }, "Transfer rejected: receiver account not found");
             throw new Error("Receiver account not found");
         }
 
@@ -134,10 +146,12 @@ export const transferMoney = async (
         );
 
         if (ledgerBalance < amount) {
+            logger.warn({ transferId, ledgerBalance, amount }, "Transfer rejected: insufficient balance");
             throw new Error("Insufficient balance");
         }
 
         // Ledger entry: debit sender
+        logger.debug({ transferId, fromAccountId, amount }, "Writing debit ledger entry");
         await client.query(
             `
             INSERT INTO ledger_entries (account_id, transfer_id, amount, entry_type)
@@ -147,6 +161,7 @@ export const transferMoney = async (
         );
 
         // Ledger entry: credit receiver
+        logger.debug({ transferId, toAccountId, amount }, "Writing credit ledger entry");
         await client.query(
             `
             INSERT INTO ledger_entries (account_id, transfer_id, amount, entry_type)
@@ -169,8 +184,29 @@ export const transferMoney = async (
             `UPDATE transfers SET status = 'COMPLETED' WHERE id = $1`,
             [transferId]
         );
+        logger.debug({ transferId }, "Transfer status set to COMPLETED");
+
+        //add outbox event
+        logger.debug({ transferId }, "Writing TRANSFER_COMPLETED outbox event");
+        await client.query(
+            `INSERT INTO  outbox_events (event_type,payload,processed)
+            VALUES ($1,$2,$3)`,
+            [
+                "TRANSFER_COMPLETED",
+                JSON.stringify({
+                    "transfer_id":transferId,
+                    "from_account_id":fromAccountId,
+                    "to_account_id":toAccountId,
+                    "amount":amount,
+                    "status":"COMPLETED"
+                }),
+                false
+            ]
+
+        )
 
         await client.query("COMMIT");
+        logger.info({ transferId, fromAccountId, toAccountId, amount }, "Transfer completed successfully");
 
         const finalResult = await client.query(
             `SELECT * FROM transfers WHERE id = $1`,
@@ -181,12 +217,14 @@ export const transferMoney = async (
 
     } catch (error) {
         await client.query("ROLLBACK");
+        logger.error({ error, transferId }, "Transfer failed, transaction rolled back");
         if (transferId) {
             // Mark as FAILED outside the rolled-back transaction
             await pool.query(
                 `UPDATE transfers SET status = 'FAILED' WHERE id = $1`,
                 [transferId]
             );
+            logger.warn({ transferId }, "Transfer marked as FAILED");
         }
         throw error;
     } finally {

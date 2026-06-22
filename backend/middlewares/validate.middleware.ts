@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import type { ZodSchema } from "zod";
+import { logger } from "../utils/logger.js";
 
 export const validate = (schema: ZodSchema) => (req: Request, res: Response, next: NextFunction) => {
     try {
         const result = schema.safeParse(req.body);
         if(!result.success){
+            logger.warn({ errors: result.error.flatten() }, "Request validation failed");
             return res.status(400).json({
                 success: false,
                 message: "Invalid request body",
@@ -14,6 +16,7 @@ export const validate = (schema: ZodSchema) => (req: Request, res: Response, nex
         req.body = result.data;
         next();
     } catch (error) {
+        logger.error({ error }, "Validation middleware: unexpected error");
         return res.status(500).json({
             success: false,
             message: "Internal server error"
