@@ -1,0 +1,57 @@
+name: Bank transfer project CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: Bank-api
+          POSTGRES_PASSWORD: 12345
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Project
+        run: npm run build
+
+      - name: Run Tests
+        env:
+          DB_USER: postgres
+          DB_HOST: localhost
+          DB_NAME: Bank-api
+          DB_PASSWORD: 12345
+          DB_PORT: 5432
+          NODE_ENV: test
+          LOG_LEVEL: info
+          JWT_SECRET: test_jwt_secret
+        run: npm test
