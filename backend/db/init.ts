@@ -7,13 +7,13 @@ export async function initDatabase() {
         try {
             await pool.query(`
                 DO $$ BEGIN
-                    CREATE TYPE transfer_status AS ENUM ('PENDING', 'COMPLETED', 'FAILED');
+                    CREATE TYPE transfer_status AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED');
                 EXCEPTION
                     WHEN duplicate_object THEN null;
                 END $$;
 
                 DO $$ BEGIN
-                    CREATE TYPE ledger_entry_type AS ENUM ('CREDIT', 'DEBIT');
+                    CREATE TYPE ledger_entry_type AS ENUM ('DEPOSIT', 'WITHDRAWAL', 'TRANSFER_IN', 'TRANSFER_OUT');
                 EXCEPTION
                     WHEN duplicate_object THEN null;
                 END $$;
