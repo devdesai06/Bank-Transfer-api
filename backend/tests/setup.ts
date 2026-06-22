@@ -14,6 +14,11 @@ beforeAll(async () => {
         VALUES (1, 'testuser', 'hashed_password_placeholder')
         ON CONFLICT (id) DO NOTHING
     `);
+
+    // Reset sequence so next auto-increment ID is 2, avoiding duplicate key errors
+    await pool.query(`
+        SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1));
+    `);
 });
 
 // Wipe all transactional data between tests so each test starts clean.
