@@ -60,8 +60,47 @@ export const transferMoney = async (
             throw new Error("Transfer already being processed");
         }
 
-        // ── Phase 2: Main ACID transaction ────────────────────────────────
-       
+        // Prevent deadlocks by acquiring exclusive locks on accounts in deterministic order first
+        const firstId = Math.min(fromAccountId, toAccountId);
+        const secondId = Math.max(fromAccountId, toAccountId);
+        logger.debug({ firstId, secondId }, "Acquiring row locks in deterministic order");
+
+        await client.query(
+            `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`,
+            [firstId]
+        );
+        await client.query(
+            `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`,
+            [secondId]
+        );
+
+        // Fetch actual sender and verify if they exist and are authorized
+        const senderResult = await client.query(
+            `SELECT * FROM accounts WHERE id = $1`,
+            [fromAccountId]
+        );
+        const sender = senderResult.rows[0];
+
+        if (!sender) {
+            logger.warn({ fromAccountId }, "Transfer rejected: sender account not found");
+            throw new Error("Sender account not found");
+        }
+        if (sender.owner_id !== userId) {
+            logger.warn({ fromAccountId, userId }, "Transfer rejected: unauthorized sender");
+            throw new Error("Unauthorized to transfer from this account");
+        }
+
+        // Fetch actual receiver
+        const receiverResult = await client.query(
+            `SELECT * FROM accounts WHERE id = $1`,
+            [toAccountId]
+        );
+        const receiver = receiverResult.rows[0];
+
+        if (!receiver) {
+            logger.warn({ toAccountId }, "Transfer rejected: receiver account not found");
+            throw new Error("Receiver account not found");
+        }
 
         // Insert the transfer record in PENDING state
         logger.debug({ fromAccountId, toAccountId, amount }, "Inserting transfer record in PENDING state");
@@ -90,48 +129,6 @@ export const transferMoney = async (
             [transferId]
         );
         logger.debug({ transferId }, "Transfer status set to PROCESSING");
-
-        // Prevent deadlocks by always locking in same order
-        const firstId = Math.min(fromAccountId, toAccountId);
-        const secondId = Math.max(fromAccountId, toAccountId);
-        logger.debug({ firstId, secondId }, "Acquiring row locks in deterministic order");
-
-        await client.query(
-            `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`,
-            [firstId]
-        );
-        await client.query(
-            `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`,
-            [secondId]
-        );
-
-        // Fetch actual sender
-        const senderResult = await client.query(
-            `SELECT * FROM accounts WHERE id = $1`,
-            [fromAccountId]
-        );
-        const sender = senderResult.rows[0];
-
-        if (!sender) {
-            logger.warn({ fromAccountId }, "Transfer rejected: sender account not found");
-            throw new Error("Sender account not found");
-        }
-        if (sender.owner_id !== userId) {
-            logger.warn({ fromAccountId, userId }, "Transfer rejected: unauthorized sender");
-            throw new Error("Unauthorized to transfer from this account");
-        }
-
-        // Fetch actual receiver
-        const receiverResult = await client.query(
-            `SELECT * FROM accounts WHERE id = $1`,
-            [toAccountId]
-        );
-        const receiver = receiverResult.rows[0];
-
-        if (!receiver) {
-            logger.warn({ toAccountId }, "Transfer rejected: receiver account not found");
-            throw new Error("Receiver account not found");
-        }
 
         const balanceResult = await client.query(
             `SELECT COALESCE(SUM(amount),0) AS balance
